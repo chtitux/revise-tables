@@ -267,7 +267,7 @@ function App() {
 
         {/* Zone de debug */}
         {showDebug && debugLogs.length > 0 && (
-          <div className="fixed top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-2 font-mono z-50">
+          <div className="fixed bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-2 font-mono z-50">
             {debugLogs.map((log, i) => (
               <div key={i} className="truncate">{log}</div>
             ))}
