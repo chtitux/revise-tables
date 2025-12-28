@@ -21,8 +21,14 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
+
+  // Fonction pour ajouter un log de debug
+  function addDebugLog(message: string) {
+    setDebugLogs(prev => [...prev.slice(-4), message]); // Garder seulement les 5 derniers
+  }
 
   // Générer une nouvelle question
   function generateQuestion(): Question {
@@ -45,9 +51,9 @@ function App() {
     // Ne pas revalider si déjà en cours de feedback
     if (feedback !== null) return;
 
-    const value = extractNumberFromText(userInput);
+    const value = extractNumberFromText(userInput, addDebugLog);
 
-    console.log('Texte reconnu:', userInput, 'Nombre extrait:', value); // Debug
+    addDebugLog(`Submit: "${userInput}" → ${value}`);
 
     if (value === null) {
       setFeedback('invalid');
@@ -111,19 +117,21 @@ function App() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      console.log('Reconnaissance vocale:', transcript); // Debug
+      addDebugLog(`Vocal: "${transcript}"`);
       setRecognizedText(transcript);
 
       // Extraire le nombre du texte reconnu
-      const number = extractNumberFromText(transcript);
+      const number = extractNumberFromText(transcript, addDebugLog);
       if (number !== null) {
         setUserInput(number.toString());
+        addDebugLog(`→ Nombre: ${number} (auto-submit)`);
         // Validation automatique quand un nombre est détecté
         setTimeout(() => {
           handleSubmit();
         }, 500);
       } else {
         setUserInput(transcript);
+        addDebugLog(`→ Pas de nombre détecté`);
       }
     };
 
@@ -193,6 +201,15 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
+        {/* Zone de debug */}
+        {debugLogs.length > 0 && (
+          <div className="fixed top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-2 font-mono z-50">
+            {debugLogs.map((log, i) => (
+              <div key={i} className="truncate">{log}</div>
+            ))}
+          </div>
+        )}
+
         {/* Compteur de score */}
         <div className="text-center mb-8">
           <div className="inline-block bg-white rounded-full px-8 py-4 shadow-2xl">

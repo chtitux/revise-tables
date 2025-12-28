@@ -1,8 +1,8 @@
 // Convertit les mots français en nombres
-export function parseFrenchNumber(text: string): number | null {
+export function parseFrenchNumber(text: string, debug?: (msg: string) => void): number | null {
   if (!text) return null;
 
-  console.log('parseFrenchNumber - Input:', JSON.stringify(text)); // Debug
+  if (debug) debug(`Parse: "${text}"`);
 
   // Nettoyer le texte - enlever tous les caractères spéciaux sauf espaces et tirets
   const cleanText = text.toLowerCase().trim()
@@ -10,7 +10,7 @@ export function parseFrenchNumber(text: string): number | null {
     .replace(/\s+/g, ' ')
     .trim();
 
-  console.log('parseFrenchNumber - Clean:', JSON.stringify(cleanText)); // Debug
+  if (debug) debug(`Clean: "${cleanText}"`);
 
   // Dictionnaire des nombres de base
   const units: Record<string, number> = {
@@ -53,12 +53,12 @@ export function parseFrenchNumber(text: string): number | null {
 
   // Vérifier si c'est un nombre direct
   if (units[cleanText] !== undefined) {
-    console.log('parseFrenchNumber - Found in units:', units[cleanText]); // Debug
+    if (debug) debug(`Found: units[${cleanText}] = ${units[cleanText]}`);
     return units[cleanText];
   }
 
   if (tens[cleanText] !== undefined) {
-    console.log('parseFrenchNumber - Found in tens:', tens[cleanText]); // Debug
+    if (debug) debug(`Found: tens[${cleanText}] = ${tens[cleanText]}`);
     return tens[cleanText];
   }
 
@@ -93,7 +93,7 @@ export function parseFrenchNumber(text: string): number | null {
   };
 
   if (commonNumbers[cleanText] !== undefined) {
-    console.log('parseFrenchNumber - Found in common:', commonNumbers[cleanText]); // Debug
+    if (debug) debug(`Found: common[${cleanText}] = ${commonNumbers[cleanText]}`);
     return commonNumbers[cleanText];
   }
 
@@ -141,23 +141,21 @@ export function parseFrenchNumber(text: string): number | null {
 
   total += current;
 
-  console.log('parseFrenchNumber - Result:', total); // Debug
+  if (debug) debug(`Result: ${total > 0 ? total : 'null'}`);
 
   // Si on n'a pas trouvé de nombre valide, retourner null
   return total > 0 ? total : null;
 }
 
 // Fonction pour extraire un nombre d'un texte quelconque
-export function extractNumberFromText(text: string): number | null {
+export function extractNumberFromText(text: string, debug?: (msg: string) => void): number | null {
   if (!text) return null;
-
-  console.log('extractNumberFromText - Input:', JSON.stringify(text)); // Debug
 
   // Nettoyer le texte d'abord
   const cleanedText = text.trim();
 
   // D'abord essayer de parser en français (ça inclut aussi les chiffres maintenant)
-  const frenchResult = parseFrenchNumber(cleanedText);
+  const frenchResult = parseFrenchNumber(cleanedText, debug);
   if (frenchResult !== null) {
     return frenchResult;
   }
@@ -165,7 +163,9 @@ export function extractNumberFromText(text: string): number | null {
   // Si rien n'a marché, chercher un nombre pur
   const numberMatch = cleanedText.match(/\d+/);
   if (numberMatch) {
-    return parseInt(numberMatch[0], 10);
+    const num = parseInt(numberMatch[0], 10);
+    if (debug) debug(`Regex match: ${num}`);
+    return num;
   }
 
   return null;
