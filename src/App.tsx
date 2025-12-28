@@ -45,15 +45,23 @@ function App() {
   }
 
   // Gérer la soumission
-  function handleSubmit(e?: React.FormEvent) {
+  function handleSubmit(e?: React.FormEvent, valueOverride?: number) {
     if (e) e.preventDefault();
 
     // Ne pas revalider si déjà en cours de feedback
     if (feedback !== null) return;
 
-    const value = extractNumberFromText(userInput, addDebugLog);
+    let value: number | null;
 
-    addDebugLog(`Submit: "${userInput}" → ${value}`);
+    if (valueOverride !== undefined) {
+      // Utiliser la valeur passée en paramètre (pour auto-submit vocal)
+      value = valueOverride;
+      addDebugLog(`Submit (auto): ${value}`);
+    } else {
+      // Extraire depuis userInput (pour submit manuel)
+      value = extractNumberFromText(userInput, addDebugLog);
+      addDebugLog(`Submit (manual): "${userInput}" → ${value}`);
+    }
 
     if (value === null) {
       setFeedback('invalid');
@@ -125,9 +133,9 @@ function App() {
       if (number !== null) {
         setUserInput(number.toString());
         addDebugLog(`→ Nombre: ${number} (auto-submit)`);
-        // Validation automatique quand un nombre est détecté
+        // Validation automatique quand un nombre est détecté - passer le nombre directement
         setTimeout(() => {
-          handleSubmit();
+          handleSubmit(undefined, number);
         }, 500);
       } else {
         setUserInput(transcript);
