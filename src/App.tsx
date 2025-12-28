@@ -22,6 +22,7 @@ function App() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
   const recognitionRef = useRef<any>(null);
+  const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
 
   // Générer une nouvelle question
   function generateQuestion(): Question {
@@ -41,7 +42,12 @@ function App() {
   function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
 
+    // Ne pas revalider si déjà en cours de feedback
+    if (feedback !== null) return;
+
     const value = extractNumberFromText(userInput);
+
+    console.log('Texte reconnu:', userInput, 'Nombre extrait:', value); // Debug
 
     if (value === null) {
       setFeedback('invalid');
@@ -91,21 +97,21 @@ function App() {
       return;
     }
 
+    shouldListenRef.current = true;
+    setIsListening(true);
+
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
 
     recognition.lang = 'fr-FR';
-    recognition.continuous = true; // Mode continu
+    recognition.continuous = false; // On redémarre manuellement pour plus de contrôle
     recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
-      const lastResult = event.results[event.results.length - 1];
-      const transcript = lastResult[0].transcript;
+      const transcript = event.results[0][0].transcript;
+      console.log('Reconnaissance vocale:', transcript); // Debug
       setRecognizedText(transcript);
 
       // Extraire le nombre du texte reconnu
@@ -115,7 +121,7 @@ function App() {
         // Validation automatique quand un nombre est détecté
         setTimeout(() => {
           handleSubmit();
-        }, 100);
+        }, 500);
       } else {
         setUserInput(transcript);
       }
@@ -123,21 +129,42 @@ function App() {
 
     recognition.onerror = (event: any) => {
       console.error('Erreur de reconnaissance vocale:', event.error);
-      if (event.error === 'no-speech') {
-        // Redémarrer si pas de parole détectée
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        // Continuer d'écouter
+        if (shouldListenRef.current) {
+          setTimeout(() => {
+            if (shouldListenRef.current && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch (e) {
+                // Ignore
+              }
+            }
+          }, 100);
+        }
         return;
       }
+      // Autres erreurs : arrêter
+      shouldListenRef.current = false;
       setIsListening(false);
     };
 
     recognition.onend = () => {
-      // Redémarrer automatiquement si toujours en mode écoute
-      if (isListening && recognitionRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {
-          console.error('Erreur au redémarrage:', e);
-        }
+      // Redémarrer automatiquement si on doit continuer d'écouter
+      if (shouldListenRef.current) {
+        setTimeout(() => {
+          if (shouldListenRef.current && recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+            } catch (e) {
+              console.error('Erreur au redémarrage:', e);
+              shouldListenRef.current = false;
+              setIsListening(false);
+            }
+          }
+        }, 100);
+      } else {
+        setIsListening(false);
       }
     };
 
@@ -146,6 +173,7 @@ function App() {
   }
 
   function stopListening() {
+    shouldListenRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
