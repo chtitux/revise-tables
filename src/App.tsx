@@ -21,7 +21,14 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const recognitionRef = useRef<any>(null);
+  const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
+
+  // Fonction pour ajouter un log de debug
+  function addDebugLog(message: string) {
+    setDebugLogs(prev => [...prev.slice(-4), message]); // Garder seulement les 5 derniers
+  }
 
   // Générer une nouvelle question
   function generateQuestion(): Question {
@@ -41,7 +48,12 @@ function App() {
   function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
 
-    const value = extractNumberFromText(userInput);
+    // Ne pas revalider si déjà en cours de feedback
+    if (feedback !== null) return;
+
+    const value = extractNumberFromText(userInput, addDebugLog);
+
+    addDebugLog(`Submit: "${userInput}" → ${value}`);
 
     if (value === null) {
       setFeedback('invalid');
@@ -91,53 +103,76 @@ function App() {
       return;
     }
 
+    shouldListenRef.current = true;
+    setIsListening(true);
+
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
 
     recognition.lang = 'fr-FR';
-    recognition.continuous = true; // Mode continu
+    recognition.continuous = false; // On redémarre manuellement pour plus de contrôle
     recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
-      const lastResult = event.results[event.results.length - 1];
-      const transcript = lastResult[0].transcript;
+      const transcript = event.results[0][0].transcript;
+      addDebugLog(`Vocal: "${transcript}"`);
       setRecognizedText(transcript);
 
       // Extraire le nombre du texte reconnu
-      const number = extractNumberFromText(transcript);
+      const number = extractNumberFromText(transcript, addDebugLog);
       if (number !== null) {
         setUserInput(number.toString());
+        addDebugLog(`→ Nombre: ${number} (auto-submit)`);
         // Validation automatique quand un nombre est détecté
         setTimeout(() => {
           handleSubmit();
-        }, 100);
+        }, 500);
       } else {
         setUserInput(transcript);
+        addDebugLog(`→ Pas de nombre détecté`);
       }
     };
 
     recognition.onerror = (event: any) => {
       console.error('Erreur de reconnaissance vocale:', event.error);
-      if (event.error === 'no-speech') {
-        // Redémarrer si pas de parole détectée
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        // Continuer d'écouter
+        if (shouldListenRef.current) {
+          setTimeout(() => {
+            if (shouldListenRef.current && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch (e) {
+                // Ignore
+              }
+            }
+          }, 100);
+        }
         return;
       }
+      // Autres erreurs : arrêter
+      shouldListenRef.current = false;
       setIsListening(false);
     };
 
     recognition.onend = () => {
-      // Redémarrer automatiquement si toujours en mode écoute
-      if (isListening && recognitionRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {
-          console.error('Erreur au redémarrage:', e);
-        }
+      // Redémarrer automatiquement si on doit continuer d'écouter
+      if (shouldListenRef.current) {
+        setTimeout(() => {
+          if (shouldListenRef.current && recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+            } catch (e) {
+              console.error('Erreur au redémarrage:', e);
+              shouldListenRef.current = false;
+              setIsListening(false);
+            }
+          }
+        }, 100);
+      } else {
+        setIsListening(false);
       }
     };
 
@@ -146,6 +181,7 @@ function App() {
   }
 
   function stopListening() {
+    shouldListenRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
@@ -165,6 +201,15 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
+        {/* Zone de debug */}
+        {debugLogs.length > 0 && (
+          <div className="fixed top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-2 font-mono z-50">
+            {debugLogs.map((log, i) => (
+              <div key={i} className="truncate">{log}</div>
+            ))}
+          </div>
+        )}
+
         {/* Compteur de score */}
         <div className="text-center mb-8">
           <div className="inline-block bg-white rounded-full px-8 py-4 shadow-2xl">
