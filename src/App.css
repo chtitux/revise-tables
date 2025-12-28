@@ -1,0 +1,78 @@
+/* Animations personnalisées */
+
+/* Animation pour les emojis de succès */
+@keyframes bounce-scale {
+  0%, 100% {
+    transform: scale(1) translateY(0);
+  }
+  25% {
+    transform: scale(1.3) translateY(-30px);
+  }
+  50% {
+    transform: scale(1.1) translateY(-15px);
+  }
+  75% {
+    transform: scale(1.2) translateY(-20px);
+  }
+}
+
+.animate-bounce-scale {
+  animation: bounce-scale 0.8s ease-in-out;
+}
+
+/* Animation de secousse pour les erreurs */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-10px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(10px);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.6s ease-in-out;
+}
+
+/* Animations pour la célébration */
+.celebration-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.celebration-emoji {
+  position: absolute;
+  font-size: 3rem;
+  animation: fall-and-fade linear infinite;
+  top: -50px;
+  opacity: 0;
+}
+
+@keyframes fall-and-fade {
+  0% {
+    top: -50px;
+    opacity: 1;
+    transform: rotate(0deg);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+    transform: rotate(360deg);
+  }
+}
+
+/* Styles supplémentaires */
+#root {
+  width: 100%;
+}
