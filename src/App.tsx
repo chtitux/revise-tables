@@ -28,6 +28,7 @@ function App() {
   const [showDebug, setShowDebug] = useState(false);
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
+  const questionRef = useRef<Question>(question); // Ref pour toujours avoir la question actuelle
 
   // Fonction pour ajouter un log de debug
   function addDebugLog(message: string) {
@@ -88,16 +89,19 @@ function App() {
     // Ne pas revalider si déjà en cours de feedback
     if (feedback !== null) return;
 
+    // Utiliser la ref pour avoir la question actuelle (évite les closures périmées)
+    const currentQuestion = questionRef.current;
+
     let value: number | null;
 
     if (valueOverride !== undefined) {
       // Utiliser la valeur passée en paramètre (pour auto-submit vocal)
       value = valueOverride;
-      addDebugLog(`Submit (auto): ${value} vs ${question.num1}×${question.num2}=${question.answer}`);
+      addDebugLog(`Submit (auto): ${value} vs ${currentQuestion.num1}×${currentQuestion.num2}=${currentQuestion.answer}`);
     } else {
       // Extraire depuis userInput (pour submit manuel)
       value = extractNumberFromText(userInput, addDebugLog);
-      addDebugLog(`Submit (manual): ${value} vs ${question.num1}×${question.num2}=${question.answer}`);
+      addDebugLog(`Submit (manual): ${value} vs ${currentQuestion.num1}×${currentQuestion.num2}=${currentQuestion.answer}`);
     }
 
     if (value === null) {
@@ -108,7 +112,7 @@ function App() {
       return;
     }
 
-    if (value === question.answer) {
+    if (value === currentQuestion.answer) {
       // Bonne réponse
       const emoji = SUCCESS_EMOJIS[Math.floor(Math.random() * SUCCESS_EMOJIS.length)];
       setSuccessEmoji(emoji);
@@ -252,6 +256,11 @@ function App() {
   useEffect(() => {
     setQuestion(generateQuestion());
   }, [generateQuestion]);
+
+  // Synchroniser la ref avec le state question
+  useEffect(() => {
+    questionRef.current = question;
+  }, [question]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
