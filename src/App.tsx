@@ -13,7 +13,9 @@ const SUCCESS_EMOJIS = ['🎉', '🌟', '⭐', '✨', '🎊', '🏆', '💯', '�
 const CELEBRATION_EMOJIS = ['🎉', '🎊', '🥳', '🎈', '🎆', '🎇', '✨', '🌟', '⭐', '💫', '🏆', '👑', '💯', '🔥'];
 
 function App() {
-  const [question, setQuestion] = useState<Question>(generateQuestion());
+  const [leftNumbers, setLeftNumbers] = useState<number[]>([0, 1, 2, 3, 4, 5]);
+  const [rightNumbers, setRightNumbers] = useState<number[]>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const [question, setQuestion] = useState<Question>({ num1: 2, num2: 3, answer: 6 }); // Temporaire
   const [userInput, setUserInput] = useState('');
   const [recognizedText, setRecognizedText] = useState('');
   const [score, setScore] = useState(0);
@@ -22,6 +24,8 @@ function App() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
 
@@ -30,10 +34,43 @@ function App() {
     setDebugLogs(prev => [...prev.slice(-4), message]); // Garder seulement les 5 derniers
   }
 
+  // Fonctions pour gérer les nombres sélectionnés
+  function toggleNumber(side: 'left' | 'right', num: number) {
+    const setter = side === 'left' ? setLeftNumbers : setRightNumbers;
+    const current = side === 'left' ? leftNumbers : rightNumbers;
+
+    if (current.includes(num)) {
+      setter(current.filter(n => n !== num));
+    } else {
+      setter([...current, num].sort((a, b) => a - b));
+    }
+  }
+
+  function selectAllNumbers(side: 'left' | 'right') {
+    const setter = side === 'left' ? setLeftNumbers : setRightNumbers;
+    setter([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  }
+
+  function selectNoNumbers(side: 'left' | 'right') {
+    const setter = side === 'left' ? setLeftNumbers : setRightNumbers;
+    setter([]);
+  }
+
   // Générer une nouvelle question
   function generateQuestion(): Question {
-    const num1 = Math.floor(Math.random() * 10) + 1;
-    const num2 = Math.floor(Math.random() * 10) + 1;
+    // Sélectionner un nombre aléatoire parmi les nombres sélectionnés
+    const left = leftNumbers.length > 0
+      ? leftNumbers[Math.floor(Math.random() * leftNumbers.length)]
+      : 0;
+    const right = rightNumbers.length > 0
+      ? rightNumbers[Math.floor(Math.random() * rightNumbers.length)]
+      : 0;
+
+    // Échange aléatoire (50%)
+    const swap = Math.random() < 0.5;
+    const num1 = swap ? right : left;
+    const num2 = swap ? left : right;
+
     return { num1, num2, answer: num1 * num2 };
   }
 
@@ -206,15 +243,135 @@ function App() {
     };
   }, []);
 
+  // Générer une première question au chargement
+  useEffect(() => {
+    setQuestion(generateQuestion());
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
+        {/* Bouton paramètres */}
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="fixed top-4 right-4 bg-white rounded-full w-14 h-14 shadow-lg hover:shadow-xl transition-all hover:scale-110 text-3xl z-40 flex items-center justify-center"
+          aria-label="Paramètres"
+        >
+          ⚙️
+        </button>
+
         {/* Zone de debug */}
-        {debugLogs.length > 0 && (
+        {showDebug && debugLogs.length > 0 && (
           <div className="fixed top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-2 font-mono z-50">
             {debugLogs.map((log, i) => (
               <div key={i} className="truncate">{log}</div>
             ))}
+          </div>
+        )}
+
+        {/* Panneau de paramètres */}
+        {showSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold text-purple-600">⚙️ Paramètres</h2>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-4xl hover:scale-110 transition-transform"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Option debug */}
+              <div className="mb-6 p-4 bg-gray-100 rounded-2xl">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-xl font-semibold text-gray-700">Afficher le debug</span>
+                  <input
+                    type="checkbox"
+                    checked={showDebug}
+                    onChange={(e) => setShowDebug(e.target.checked)}
+                    className="w-6 h-6 cursor-pointer"
+                  />
+                </label>
+              </div>
+
+              {/* Nombres partie gauche */}
+              <div className="mb-6 p-4 bg-purple-100 rounded-2xl">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xl font-bold text-purple-700">Nombres partie gauche</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => selectAllNumbers('left')}
+                      className="px-3 py-1 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
+                    >
+                      Tous
+                    </button>
+                    <button
+                      onClick={() => selectNoNumbers('left')}
+                      className="px-3 py-1 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600"
+                    >
+                      Aucun
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-6 gap-2">
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => toggleNumber('left', num)}
+                      className={`py-3 px-4 rounded-lg font-bold text-lg transition-all ${
+                        leftNumbers.includes(num)
+                          ? 'bg-purple-500 text-white shadow-lg scale-105'
+                          : 'bg-white text-gray-400 border-2 border-gray-300'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Nombres partie droite */}
+              <div className="mb-4 p-4 bg-pink-100 rounded-2xl">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xl font-bold text-pink-700">Nombres partie droite</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => selectAllNumbers('right')}
+                      className="px-3 py-1 bg-pink-500 text-white rounded-lg text-sm hover:bg-pink-600"
+                    >
+                      Tous
+                    </button>
+                    <button
+                      onClick={() => selectNoNumbers('right')}
+                      className="px-3 py-1 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600"
+                    >
+                      Aucun
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-6 gap-2">
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => toggleNumber('right', num)}
+                      className={`py-3 px-4 rounded-lg font-bold text-lg transition-all ${
+                        rightNumbers.includes(num)
+                          ? 'bg-pink-500 text-white shadow-lg scale-105'
+                          : 'bg-white text-gray-400 border-2 border-gray-300'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 text-center mt-4">
+                Les côtés gauche et droite sont échangés aléatoirement (50%)
+              </p>
+            </div>
           </div>
         )}
 
