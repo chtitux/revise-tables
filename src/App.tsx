@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { extractNumberFromText } from './utils/frenchNumberParser';
 import './App.css';
 
@@ -56,8 +56,8 @@ function App() {
     setter([]);
   }
 
-  // Générer une nouvelle question
-  function generateQuestion(): Question {
+  // Générer une nouvelle question avec useCallback pour éviter les closures périmées
+  const generateQuestion = useCallback((): Question => {
     // Sélectionner un nombre aléatoire parmi les nombres sélectionnés
     const left = leftNumbers.length > 0
       ? leftNumbers[Math.floor(Math.random() * leftNumbers.length)]
@@ -72,7 +72,7 @@ function App() {
     const num2 = swap ? left : right;
 
     return { num1, num2, answer: num1 * num2 };
-  }
+  }, [leftNumbers, rightNumbers]);
 
   // Réinitialiser le formulaire
   function resetForm() {
@@ -93,11 +93,11 @@ function App() {
     if (valueOverride !== undefined) {
       // Utiliser la valeur passée en paramètre (pour auto-submit vocal)
       value = valueOverride;
-      addDebugLog(`Submit (auto): ${value}`);
+      addDebugLog(`Submit (auto): ${value} vs ${question.num1}×${question.num2}=${question.answer}`);
     } else {
       // Extraire depuis userInput (pour submit manuel)
       value = extractNumberFromText(userInput, addDebugLog);
-      addDebugLog(`Submit (manual): "${userInput}" → ${value}`);
+      addDebugLog(`Submit (manual): ${value} vs ${question.num1}×${question.num2}=${question.answer}`);
     }
 
     if (value === null) {
@@ -127,9 +127,13 @@ function App() {
             resetForm();
           }, 5000);
         } else {
-          // Nouvelle question
+          // Nouvelle question - reset feedback immédiatement pour permettre réponse rapide
+          setFeedback(null);
           setQuestion(generateQuestion());
-          resetForm();
+          setTimeout(() => {
+            setUserInput('');
+            setRecognizedText('');
+          }, 100);
         }
       }, 1500);
     } else {
@@ -171,9 +175,10 @@ function App() {
         setUserInput(number.toString());
         addDebugLog(`→ Nombre: ${number} (auto-submit)`);
         // Validation automatique quand un nombre est détecté - passer le nombre directement
+        // On réduit le timeout pour éviter les race conditions
         setTimeout(() => {
           handleSubmit(undefined, number);
-        }, 500);
+        }, 100);
       } else {
         setUserInput(transcript);
         addDebugLog(`→ Pas de nombre détecté`);
@@ -243,10 +248,10 @@ function App() {
     };
   }, []);
 
-  // Générer une première question au chargement
+  // Générer une première question au chargement et quand les nombres changent
   useEffect(() => {
     setQuestion(generateQuestion());
-  }, []);
+  }, [generateQuestion]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
