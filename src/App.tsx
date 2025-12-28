@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { extractNumberFromText } from './utils/frenchNumberParser';
 import './App.css';
 
@@ -21,6 +21,7 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
+  const recognitionRef = useRef<any>(null);
 
   // Générer une nouvelle question
   function generateQuestion(): Question {
@@ -37,8 +38,8 @@ function App() {
   }
 
   // Gérer la soumission
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault();
 
     const value = extractNumberFromText(userInput);
 
@@ -95,7 +96,7 @@ function App() {
     const recognition = new SpeechRecognition();
 
     recognition.lang = 'fr-FR';
-    recognition.continuous = false;
+    recognition.continuous = true; // Mode continu
     recognition.interimResults = false;
 
     recognition.onstart = () => {
@@ -103,13 +104,18 @@ function App() {
     };
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
+      const lastResult = event.results[event.results.length - 1];
+      const transcript = lastResult[0].transcript;
       setRecognizedText(transcript);
 
       // Extraire le nombre du texte reconnu
       const number = extractNumberFromText(transcript);
       if (number !== null) {
         setUserInput(number.toString());
+        // Validation automatique quand un nombre est détecté
+        setTimeout(() => {
+          handleSubmit();
+        }, 100);
       } else {
         setUserInput(transcript);
       }
@@ -117,15 +123,44 @@ function App() {
 
     recognition.onerror = (event: any) => {
       console.error('Erreur de reconnaissance vocale:', event.error);
+      if (event.error === 'no-speech') {
+        // Redémarrer si pas de parole détectée
+        return;
+      }
       setIsListening(false);
     };
 
     recognition.onend = () => {
-      setIsListening(false);
+      // Redémarrer automatiquement si toujours en mode écoute
+      if (isListening && recognitionRef.current) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error('Erreur au redémarrage:', e);
+        }
+      }
     };
 
+    recognitionRef.current = recognition;
     recognition.start();
   }
+
+  function stopListening() {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }
+
+  // Nettoyer la reconnaissance vocale au démontage
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
@@ -175,15 +210,15 @@ function App() {
                 <div className="flex gap-4 justify-center">
                   <button
                     type="button"
-                    onClick={startListening}
-                    disabled={isListening || feedback !== null}
+                    onClick={isListening ? stopListening : startListening}
+                    disabled={feedback !== null}
                     className={`flex-1 max-w-xs px-8 py-6 text-2xl font-bold rounded-2xl transition-all shadow-lg ${
                       isListening
                         ? 'bg-red-500 text-white animate-pulse'
                         : 'bg-blue-500 text-white hover:bg-blue-600 hover:scale-105'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {isListening ? '🎤 Écoute...' : '🎤 Parler'}
+                    {isListening ? '🔴 Arrêter' : '🎤 Parler'}
                   </button>
 
                   <button
