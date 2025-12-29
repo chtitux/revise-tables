@@ -54,6 +54,7 @@ function App() {
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
   const questionRef = useRef<Question>(question); // Ref pour toujours avoir la question actuelle
+  const wakeLockRef = useRef<any>(null); // Ref pour le Wake Lock (empêcher mise en veille)
 
   // Fonction pour ajouter un log de debug
   function addDebugLog(message: string) {
@@ -124,6 +125,37 @@ function App() {
     setUserInput('');
     setRecognizedText('');
     setFeedback(null);
+  }
+
+  // Demander un Wake Lock pour empêcher la mise en veille pendant l'écoute
+  async function requestWakeLock() {
+    try {
+      // Vérifier si l'API Wake Lock est disponible
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        addDebugLog('Wake Lock activé (écran restera allumé)');
+
+        // Ré-activer le wake lock si la page devient visible après avoir été cachée
+        wakeLockRef.current.addEventListener('release', () => {
+          addDebugLog('Wake Lock relâché');
+        });
+      }
+    } catch (err) {
+      console.error('Erreur Wake Lock:', err);
+      // Ne pas bloquer l'application si Wake Lock n'est pas supporté
+    }
+  }
+
+  // Relâcher le Wake Lock
+  async function releaseWakeLock() {
+    try {
+      if (wakeLockRef.current) {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      }
+    } catch (err) {
+      console.error('Erreur libération Wake Lock:', err);
+    }
   }
 
   // Gérer la soumission
@@ -213,6 +245,9 @@ function App() {
     shouldListenRef.current = true;
     setIsListening(true);
 
+    // Activer le Wake Lock pour empêcher la mise en veille
+    requestWakeLock();
+
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -263,6 +298,7 @@ function App() {
       // Autres erreurs : arrêter
       shouldListenRef.current = false;
       setIsListening(false);
+      releaseWakeLock();
     };
 
     recognition.onend = () => {
@@ -295,16 +331,36 @@ function App() {
       recognitionRef.current = null;
     }
     setIsListening(false);
+
+    // Relâcher le Wake Lock
+    releaseWakeLock();
   }
 
-  // Nettoyer la reconnaissance vocale au démontage
+  // Nettoyer la reconnaissance vocale et le wake lock au démontage
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+      releaseWakeLock();
     };
   }, []);
+
+  // Gérer la visibilité de la page pour le Wake Lock
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      // Quand la page redevient visible et qu'on est en train d'écouter
+      if (document.visibilityState === 'visible' && isListening) {
+        // Re-demander le wake lock car il a été automatiquement relâché
+        await requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isListening]);
 
   // Générer une première question au chargement et quand les nombres changent
   useEffect(() => {
