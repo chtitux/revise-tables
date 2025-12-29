@@ -44,7 +44,7 @@ function App() {
   const [userInput, setUserInput] = useState('');
   const [recognizedText, setRecognizedText] = useState('');
   const [score, setScore] = useState(() => loadFromLocalStorage('score', 0));
-  const [feedback, setFeedback] = useState<'correct' | 'incorrect' | 'invalid' | null>(null);
+  const [feedback, setFeedback] = useState<'correct' | 'incorrect' | 'invalid' | 'unicode' | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
@@ -58,6 +58,25 @@ function App() {
   // Fonction pour ajouter un log de debug
   function addDebugLog(message: string) {
     setDebugLogs(prev => [...prev.slice(-4), message]); // Garder seulement les 5 derniers
+  }
+
+  // Fonction pour détecter les nombres Unicode (π, ½, ², etc.)
+  function containsUnicodeNumber(text: string): boolean {
+    // Caractères Unicode pour les nombres mathématiques
+    const unicodeNumberPatterns = [
+      /[\u03C0\u03C6\u03B8\u03C4]/g, // π, φ, θ, τ (lettres grecques utilisées comme constantes)
+      /[\u00B2\u00B3\u00B9\u2070-\u2079]/g, // Exposants: ², ³, ¹, ⁰-⁹
+      /[\u2080-\u2089]/g, // Indices: ₀-₉
+      /[\u00BC-\u00BE\u2150-\u215E]/g, // Fractions: ¼, ½, ¾, ⅐-⅞
+      /[\u2460-\u2473]/g, // Nombres entourés: ①-⑳
+      /[\u2776-\u277F]/g, // Nombres négatifs entourés
+      /[\u24EA\u2460-\u24FF]/g, // Nombres dans des cercles
+      /[\u2189]/g, // Fraction 0/3
+      /[\u3220-\u3229\u3280-\u3289]/g, // Nombres entre parenthèses
+      /[\uFF10-\uFF19]/g, // Chiffres pleine largeur (０-９)
+    ];
+
+    return unicodeNumberPatterns.some(pattern => pattern.test(text));
   }
 
   // Fonctions pour gérer les nombres sélectionnés
@@ -116,6 +135,16 @@ function App() {
 
     // Utiliser la ref pour avoir la question actuelle (évite les closures périmées)
     const currentQuestion = questionRef.current;
+
+    // Vérifier si l'entrée contient des nombres Unicode (uniquement pour input manuel)
+    if (valueOverride === undefined && containsUnicodeNumber(userInput)) {
+      addDebugLog(`Unicode détecté dans: "${userInput}"`);
+      setFeedback('unicode');
+      setTimeout(() => {
+        resetForm();
+      }, 3000);
+      return;
+    }
 
     let value: number | null;
 
@@ -525,6 +554,15 @@ function App() {
                   <div className="text-7xl">⚠️</div>
                   <p className="text-3xl font-bold text-orange-600 mt-4">
                     Ceci n'est pas un nombre
+                  </p>
+                </div>
+              )}
+
+              {feedback === 'unicode' && (
+                <div className="mt-8 text-center">
+                  <div className="text-7xl">😈</div>
+                  <p className="text-3xl font-bold text-purple-600 mt-4">
+                    On cherche un nombre entier rationnel !
                   </p>
                 </div>
               )}
