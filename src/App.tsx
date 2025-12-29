@@ -12,20 +12,45 @@ interface Question {
 const SUCCESS_EMOJIS = ['🎉', '🌟', '⭐', '✨', '🎊', '🏆', '💯', '🔥', '👏', '🥳'];
 const CELEBRATION_EMOJIS = ['🎉', '🎊', '🥳', '🎈', '🎆', '🎇', '✨', '🌟', '⭐', '💫', '🏆', '👑', '💯', '🔥'];
 
+// Fonction helper pour charger depuis localStorage
+function loadFromLocalStorage<T>(key: string, defaultValue: T): T {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.error(`Error loading ${key} from localStorage:`, error);
+    return defaultValue;
+  }
+}
+
+// Fonction helper pour sauvegarder dans localStorage
+function saveToLocalStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Error saving ${key} to localStorage:`, error);
+  }
+}
+
 function App() {
-  const [leftNumbers, setLeftNumbers] = useState<number[]>([0, 1, 2, 3, 4, 5]);
-  const [rightNumbers, setRightNumbers] = useState<number[]>([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  // Charger les valeurs depuis localStorage au démarrage
+  const [leftNumbers, setLeftNumbers] = useState<number[]>(() =>
+    loadFromLocalStorage('leftNumbers', [0, 1, 2, 3, 4, 5])
+  );
+  const [rightNumbers, setRightNumbers] = useState<number[]>(() =>
+    loadFromLocalStorage('rightNumbers', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+  );
   const [question, setQuestion] = useState<Question>({ num1: 2, num2: 3, answer: 6 }); // Temporaire
   const [userInput, setUserInput] = useState('');
   const [recognizedText, setRecognizedText] = useState('');
-  const [score, setScore] = useState(0);
+  const [score, setScore] = useState(() => loadFromLocalStorage('score', 0));
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | 'invalid' | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, setShowDebug] = useState(() => loadFromLocalStorage('showDebug', false));
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
   const questionRef = useRef<Question>(question); // Ref pour toujours avoir la question actuelle
@@ -261,6 +286,23 @@ function App() {
   useEffect(() => {
     questionRef.current = question;
   }, [question]);
+
+  // Sauvegarder les paramètres et le score dans localStorage quand ils changent
+  useEffect(() => {
+    saveToLocalStorage('leftNumbers', leftNumbers);
+  }, [leftNumbers]);
+
+  useEffect(() => {
+    saveToLocalStorage('rightNumbers', rightNumbers);
+  }, [rightNumbers]);
+
+  useEffect(() => {
+    saveToLocalStorage('score', score);
+  }, [score]);
+
+  useEffect(() => {
+    saveToLocalStorage('showDebug', showDebug);
+  }, [showDebug]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
