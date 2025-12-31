@@ -54,11 +54,12 @@ function App() {
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
   const questionRef = useRef<Question>(question); // Ref pour toujours avoir la question actuelle
+  const feedbackRef = useRef<'correct' | 'incorrect' | 'invalid' | 'unicode' | null>(null); // Ref pour le feedback actuel
   const wakeLockRef = useRef<any>(null); // Ref pour le Wake Lock (empêcher mise en veille)
 
   // Fonction pour ajouter un log de debug
   function addDebugLog(message: string) {
-    setDebugLogs(prev => [...prev.slice(-4), message]); // Garder seulement les 5 derniers
+    setDebugLogs(prev => [...prev.slice(-9), message]); // Garder seulement les 10 derniers
   }
 
   // Fonction pour détecter les nombres Unicode (π, ½, ², etc.)
@@ -200,6 +201,7 @@ function App() {
 
     if (value === currentQuestion.answer) {
       // Bonne réponse
+      addDebugLog(`✅ Correct! ${value} = ${currentQuestion.answer} | Score: ${score} → ${score + 1}`);
       const emoji = SUCCESS_EMOJIS[Math.floor(Math.random() * SUCCESS_EMOJIS.length)];
       setSuccessEmoji(emoji);
       setFeedback('correct');
@@ -209,17 +211,22 @@ function App() {
       setTimeout(() => {
         if (newScore === 10) {
           // Célébration pour 10 bonnes réponses
+          addDebugLog('🎉 CÉLÉBRATION! 10/10 atteint!');
           setShowCelebration(true);
           setTimeout(() => {
             setShowCelebration(false);
             setScore(0);
-            setQuestion(generateQuestion());
+            const newQ = generateQuestion();
+            addDebugLog(`🆕 Nouvelle question: ${newQ.num1}×${newQ.num2}=?`);
+            setQuestion(newQ);
             resetForm();
           }, 5000);
         } else {
           // Nouvelle question - reset feedback immédiatement pour permettre réponse rapide
           setFeedback(null);
-          setQuestion(generateQuestion());
+          const newQ = generateQuestion();
+          addDebugLog(`🆕 Nouvelle question: ${newQ.num1}×${newQ.num2}=?`);
+          setQuestion(newQ);
           setTimeout(() => {
             setUserInput('');
             setRecognizedText('');
@@ -228,6 +235,7 @@ function App() {
       }, 1500);
     } else {
       // Mauvaise réponse
+      addDebugLog(`❌ Incorrect: ${value} ≠ ${currentQuestion.answer}`);
       setFeedback('incorrect');
       setTimeout(() => {
         resetForm();
@@ -244,6 +252,7 @@ function App() {
 
     shouldListenRef.current = true;
     setIsListening(true);
+    addDebugLog('🎤 Reconnaissance vocale démarrée');
 
     // Activer le Wake Lock pour empêcher la mise en veille
     requestWakeLock();
@@ -256,31 +265,54 @@ function App() {
     recognition.continuous = false; // On redémarre manuellement pour plus de contrôle
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    addDebugLog('🔧 Config: lang=fr-FR, continuous=false');
+
+    recognition.onstart = () => {
+      addDebugLog('🟢 Écoute en cours...');
+    };
+
+    recognition.onspeechstart = () => {
+      addDebugLog('🗣️ Parole détectée');
+    };
+
+    recognition.onspeechend = () => {
+      addDebugLog('🔇 Fin de parole');
+    };
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      addDebugLog(`Vocal: "${transcript}"`);
+      const confidence = event.results[0][0].confidence;
+      addDebugLog(`📝 Vocal: "${transcript}" (conf: ${(confidence * 100).toFixed(0)}%)`);
       setRecognizedText(transcript);
 
       // Extraire le nombre du texte reconnu
+      addDebugLog(`🔍 Analyse: "${transcript}"`);
       const number = extractNumberFromText(transcript, addDebugLog);
       if (number !== null) {
         setUserInput(number.toString());
-        addDebugLog(`→ Nombre: ${number} (auto-submit)`);
+        addDebugLog(`✅ → Nombre détecté: ${number} (auto-submit)`);
         // Validation automatique quand un nombre est détecté - passer le nombre directement
         // On réduit le timeout pour éviter les race conditions
         setTimeout(() => {
-          handleSubmit(undefined, number);
+          // Vérifier qu'il n'y a pas de feedback en cours (évite les soumissions pendant l'affichage du feedback)
+          if (feedbackRef.current === null) {
+            handleSubmit(undefined, number);
+          } else {
+            addDebugLog(`⏸ Soumission ignorée (feedback en cours: ${feedbackRef.current})`);
+          }
         }, 100);
       } else {
         setUserInput(transcript);
-        addDebugLog(`→ Pas de nombre détecté`);
+        addDebugLog(`❌ → Pas de nombre détecté dans "${transcript}"`);
       }
     };
 
     recognition.onerror = (event: any) => {
       console.error('Erreur de reconnaissance vocale:', event.error);
+      addDebugLog(`⚠️ Erreur: ${event.error}`);
+
       if (event.error === 'no-speech' || event.error === 'aborted') {
+        addDebugLog('⏭️ Redémarrage auto (no-speech/aborted)');
         // Continuer d'écouter
         if (shouldListenRef.current) {
           setTimeout(() => {
@@ -288,7 +320,7 @@ function App() {
               try {
                 recognitionRef.current.start();
               } catch (e) {
-                // Ignore
+                addDebugLog(`❌ Échec redémarrage: ${e}`);
               }
             }
           }, 100);
@@ -296,26 +328,32 @@ function App() {
         return;
       }
       // Autres erreurs : arrêter
+      addDebugLog(`🛑 Arrêt (erreur: ${event.error})`);
       shouldListenRef.current = false;
       setIsListening(false);
       releaseWakeLock();
     };
 
     recognition.onend = () => {
+      addDebugLog('🔴 Session reconnaissance terminée');
       // Redémarrer automatiquement si on doit continuer d'écouter
       if (shouldListenRef.current) {
+        addDebugLog('🔄 Redémarrage auto...');
         setTimeout(() => {
           if (shouldListenRef.current && recognitionRef.current) {
             try {
               recognitionRef.current.start();
+              addDebugLog('✅ Redémarré avec succès');
             } catch (e) {
               console.error('Erreur au redémarrage:', e);
+              addDebugLog(`❌ Échec redémarrage: ${e}`);
               shouldListenRef.current = false;
               setIsListening(false);
             }
           }
         }, 100);
       } else {
+        addDebugLog('🛑 Arrêt définitif');
         setIsListening(false);
       }
     };
@@ -325,6 +363,7 @@ function App() {
   }
 
   function stopListening() {
+    addDebugLog('🛑 Arrêt manuel de la reconnaissance');
     shouldListenRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
@@ -371,6 +410,11 @@ function App() {
   useEffect(() => {
     questionRef.current = question;
   }, [question]);
+
+  // Synchroniser la ref avec le state feedback
+  useEffect(() => {
+    feedbackRef.current = feedback;
+  }, [feedback]);
 
   // Sauvegarder les paramètres et le score dans localStorage quand ils changent
   useEffect(() => {
