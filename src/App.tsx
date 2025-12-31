@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { extractNumberFromText } from './utils/frenchNumberParser';
+import { useVoiceRecognition } from './hooks/useVoiceRecognition';
 import './App.css';
 
 interface Question {
@@ -53,21 +54,17 @@ function App() {
   // États locaux (non persistés)
   const [question, setQuestion] = useState<Question>({ num1: 2, num2: 3, answer: 6 }); // Temporaire
   const [userInput, setUserInput] = useState('');
-  const [recognizedText, setRecognizedText] = useState('');
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | 'invalid' | 'unicode' | null>(null);
-  const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
-  const wakeLockRef = useRef<any>(null); // Ref pour le Wake Lock (empêcher mise en veille)
 
   // Fonction pour ajouter un log de debug
   function addDebugLog(message: string) {
     setDebugLogs(prev => [...prev.slice(-9), message]); // Garder seulement les 10 derniers
   }
+
 
   // Fonction pour détecter les nombres Unicode (π, ½, ², etc.)
   function containsUnicodeNumber(text: string): boolean {
@@ -131,40 +128,9 @@ function App() {
   // Réinitialiser le formulaire
   function resetForm() {
     setUserInput('');
-    setRecognizedText('');
     setFeedback(null);
   }
 
-  // Demander un Wake Lock pour empêcher la mise en veille pendant l'écoute
-  async function requestWakeLock() {
-    try {
-      // Vérifier si l'API Wake Lock est disponible
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        addDebugLog('Wake Lock activé (écran restera allumé)');
-
-        // Ré-activer le wake lock si la page devient visible après avoir été cachée
-        wakeLockRef.current.addEventListener('release', () => {
-          addDebugLog('Wake Lock relâché');
-        });
-      }
-    } catch (err) {
-      console.error('Erreur Wake Lock:', err);
-      // Ne pas bloquer l'application si Wake Lock n'est pas supporté
-    }
-  }
-
-  // Relâcher le Wake Lock
-  async function releaseWakeLock() {
-    try {
-      if (wakeLockRef.current) {
-        await wakeLockRef.current.release();
-        wakeLockRef.current = null;
-      }
-    } catch (err) {
-      console.error('Erreur libération Wake Lock:', err);
-    }
-  }
 
   // Gérer la soumission
   const handleSubmit = useCallback((e?: React.FormEvent, valueOverride?: number) => {
@@ -233,7 +199,6 @@ function App() {
           setQuestion(newQ);
           setTimeout(() => {
             setUserInput('');
-            setRecognizedText('');
           }, 100);
         }
       }, 1500);
@@ -245,165 +210,23 @@ function App() {
         resetForm();
       }, 1500);
     }
-  }, [question, feedback, userInput, score, generateQuestion, setScore, setFeedback, setSuccessEmoji, setShowCelebration, setQuestion, setUserInput, setRecognizedText]);
+  }, [question, feedback, userInput, score, generateQuestion, setScore, setFeedback, setSuccessEmoji, setShowCelebration, setQuestion, setUserInput]);
 
-  // Reconnaissance vocale
-  function startListening() {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('La reconnaissance vocale n\'est pas supportée par votre navigateur.');
-      return;
-    }
-
-    shouldListenRef.current = true;
-    setIsListening(true);
-    addDebugLog('🎤 Reconnaissance vocale démarrée');
-
-    // Activer le Wake Lock pour empêcher la mise en veille
-    requestWakeLock();
-
-    // @ts-ignore
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-
-    recognition.lang = 'fr-FR';
-    recognition.continuous = false; // On redémarre manuellement pour plus de contrôle
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    addDebugLog('🔧 Config: lang=fr-FR, continuous=false');
-
-    recognition.onstart = () => {
-      addDebugLog('🟢 Écoute en cours...');
-    };
-
-    recognition.onspeechstart = () => {
-      addDebugLog('🗣️ Parole détectée');
-    };
-
-    recognition.onspeechend = () => {
-      addDebugLog('🔇 Fin de parole');
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      const confidence = event.results[0][0].confidence;
-      addDebugLog(`📝 Vocal: "${transcript}" (conf: ${(confidence * 100).toFixed(0)}%)`);
-      setRecognizedText(transcript);
-
-      // Extraire le nombre du texte reconnu
-      addDebugLog(`🔍 Analyse: "${transcript}"`);
-      const number = extractNumberFromText(transcript, addDebugLog);
+  // Hook de reconnaissance vocale
+  const { isListening, recognizedText, startListening, stopListening } = useVoiceRecognition({
+    onResult: (text: string, number: number | null) => {
       if (number !== null) {
         setUserInput(number.toString());
-        addDebugLog(`✅ → Nombre détecté: ${number} (auto-submit)`);
-        // Validation automatique quand un nombre est détecté - passer le nombre directement
-        // On réduit le timeout pour éviter les race conditions
+        // Validation automatique quand un nombre est détecté
         setTimeout(() => {
-          // Vérifier qu'il n'y a pas de feedback en cours (évite les soumissions pendant l'affichage du feedback)
-          if (feedback === null) {
-            handleSubmit(undefined, number);
-          } else {
-            addDebugLog(`⏸ Soumission ignorée (feedback en cours: ${feedback})`);
-          }
+          handleSubmit(undefined, number);
         }, 100);
       } else {
-        setUserInput(transcript);
-        addDebugLog(`❌ → Pas de nombre détecté dans "${transcript}"`);
+        setUserInput(text);
       }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Erreur de reconnaissance vocale:', event.error);
-      addDebugLog(`⚠️ Erreur: ${event.error}`);
-
-      if (event.error === 'no-speech' || event.error === 'aborted') {
-        addDebugLog('⏭️ Redémarrage auto (no-speech/aborted)');
-        // Continuer d'écouter
-        if (shouldListenRef.current) {
-          setTimeout(() => {
-            if (shouldListenRef.current && recognitionRef.current) {
-              try {
-                recognitionRef.current.start();
-              } catch (e) {
-                addDebugLog(`❌ Échec redémarrage: ${e}`);
-              }
-            }
-          }, 100);
-        }
-        return;
-      }
-      // Autres erreurs : arrêter
-      addDebugLog(`🛑 Arrêt (erreur: ${event.error})`);
-      shouldListenRef.current = false;
-      setIsListening(false);
-      releaseWakeLock();
-    };
-
-    recognition.onend = () => {
-      addDebugLog('🔴 Session reconnaissance terminée');
-      // Redémarrer automatiquement si on doit continuer d'écouter
-      if (shouldListenRef.current) {
-        addDebugLog('🔄 Redémarrage auto...');
-        setTimeout(() => {
-          if (shouldListenRef.current && recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-              addDebugLog('✅ Redémarré avec succès');
-            } catch (e) {
-              console.error('Erreur au redémarrage:', e);
-              addDebugLog(`❌ Échec redémarrage: ${e}`);
-              shouldListenRef.current = false;
-              setIsListening(false);
-            }
-          }
-        }, 100);
-      } else {
-        addDebugLog('🛑 Arrêt définitif');
-        setIsListening(false);
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  }
-
-  function stopListening() {
-    addDebugLog('🛑 Arrêt manuel de la reconnaissance');
-    shouldListenRef.current = false;
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    setIsListening(false);
-
-    // Relâcher le Wake Lock
-    releaseWakeLock();
-  }
-
-  // Nettoyer la reconnaissance vocale et le wake lock au démontage
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      releaseWakeLock();
-    };
-  }, []);
-
-  // Gérer la visibilité de la page pour le Wake Lock
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      // Quand la page redevient visible et qu'on est en train d'écouter
-      if (document.visibilityState === 'visible' && isListening) {
-        // Re-demander le wake lock car il a été automatiquement relâché
-        await requestWakeLock();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isListening]);
+    },
+    addDebugLog,
+  });
 
   // Générer une première question au chargement et quand les nombres changent
   useEffect(() => {
