@@ -62,7 +62,7 @@ function App() {
 
   // Fonction pour ajouter un log de debug
   function addDebugLog(message: string) {
-    setDebugLogs(prev => [...prev.slice(-9), message]); // Garder seulement les 10 derniers
+    setDebugLogs(prev => [...prev.slice(-99), message]); // Garder seulement les 100 derniers
   }
 
 
@@ -247,9 +247,9 @@ function App() {
 
         {/* Zone de debug */}
         {showDebug && debugLogs.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-2 font-mono z-50">
-            {debugLogs.map((log, i) => (
-              <div key={i} className="truncate">{log}</div>
+          <div className="fixed bottom-0 left-0 right-0 bg-black bg-opacity-90 text-white text-xs p-2 font-mono z-50 max-h-32 overflow-y-auto flex flex-col-reverse">
+            {debugLogs.slice().reverse().map((log, i) => (
+              <div key={debugLogs.length - 1 - i} className="py-0.5">{log}</div>
             ))}
           </div>
         )}
