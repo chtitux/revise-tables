@@ -32,29 +32,36 @@ function saveToLocalStorage<T>(key: string, value: T): void {
   }
 }
 
+// Hook personnalisé pour synchroniser l'état avec localStorage
+function useLocalStorage<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => loadFromLocalStorage(key, defaultValue));
+
+  useEffect(() => {
+    saveToLocalStorage(key, value);
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
 function App() {
-  // Charger les valeurs depuis localStorage au démarrage
-  const [leftNumbers, setLeftNumbers] = useState<number[]>(() =>
-    loadFromLocalStorage('leftNumbers', [0, 1, 2, 3, 4, 5])
-  );
-  const [rightNumbers, setRightNumbers] = useState<number[]>(() =>
-    loadFromLocalStorage('rightNumbers', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
-  );
+  // États synchronisés avec localStorage
+  const [leftNumbers, setLeftNumbers] = useLocalStorage<number[]>('leftNumbers', [0, 1, 2, 3, 4, 5]);
+  const [rightNumbers, setRightNumbers] = useLocalStorage<number[]>('rightNumbers', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const [score, setScore] = useLocalStorage('score', 0);
+  const [showDebug, setShowDebug] = useLocalStorage('showDebug', false);
+
+  // États locaux (non persistés)
   const [question, setQuestion] = useState<Question>({ num1: 2, num2: 3, answer: 6 }); // Temporaire
   const [userInput, setUserInput] = useState('');
   const [recognizedText, setRecognizedText] = useState('');
-  const [score, setScore] = useState(() => loadFromLocalStorage('score', 0));
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | 'invalid' | 'unicode' | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [successEmoji, setSuccessEmoji] = useState('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [showDebug, setShowDebug] = useState(() => loadFromLocalStorage('showDebug', false));
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
-  const questionRef = useRef<Question>(question); // Ref pour toujours avoir la question actuelle
-  const feedbackRef = useRef<'correct' | 'incorrect' | 'invalid' | 'unicode' | null>(null); // Ref pour le feedback actuel
   const wakeLockRef = useRef<any>(null); // Ref pour le Wake Lock (empêcher mise en veille)
 
   // Fonction pour ajouter un log de debug
@@ -160,14 +167,11 @@ function App() {
   }
 
   // Gérer la soumission
-  function handleSubmit(e?: React.FormEvent, valueOverride?: number) {
+  const handleSubmit = useCallback((e?: React.FormEvent, valueOverride?: number) => {
     if (e) e.preventDefault();
 
     // Ne pas revalider si déjà en cours de feedback
     if (feedback !== null) return;
-
-    // Utiliser la ref pour avoir la question actuelle (évite les closures périmées)
-    const currentQuestion = questionRef.current;
 
     // Vérifier si l'entrée contient des nombres Unicode (uniquement pour input manuel)
     if (valueOverride === undefined && containsUnicodeNumber(userInput)) {
@@ -184,11 +188,11 @@ function App() {
     if (valueOverride !== undefined) {
       // Utiliser la valeur passée en paramètre (pour auto-submit vocal)
       value = valueOverride;
-      addDebugLog(`Submit (auto): ${value} vs ${currentQuestion.num1}×${currentQuestion.num2}=${currentQuestion.answer}`);
+      addDebugLog(`Submit (auto): ${value} vs ${question.num1}×${question.num2}=${question.answer}`);
     } else {
       // Extraire depuis userInput (pour submit manuel)
       value = extractNumberFromText(userInput, addDebugLog);
-      addDebugLog(`Submit (manual): ${value} vs ${currentQuestion.num1}×${currentQuestion.num2}=${currentQuestion.answer}`);
+      addDebugLog(`Submit (manual): ${value} vs ${question.num1}×${question.num2}=${question.answer}`);
     }
 
     if (value === null) {
@@ -199,9 +203,9 @@ function App() {
       return;
     }
 
-    if (value === currentQuestion.answer) {
+    if (value === question.answer) {
       // Bonne réponse
-      addDebugLog(`✅ Correct! ${value} = ${currentQuestion.answer} | Score: ${score} → ${score + 1}`);
+      addDebugLog(`✅ Correct! ${value} = ${question.answer} | Score: ${score} → ${score + 1}`);
       const emoji = SUCCESS_EMOJIS[Math.floor(Math.random() * SUCCESS_EMOJIS.length)];
       setSuccessEmoji(emoji);
       setFeedback('correct');
@@ -235,13 +239,13 @@ function App() {
       }, 1500);
     } else {
       // Mauvaise réponse
-      addDebugLog(`❌ Incorrect: ${value} ≠ ${currentQuestion.answer}`);
+      addDebugLog(`❌ Incorrect: ${value} ≠ ${question.answer}`);
       setFeedback('incorrect');
       setTimeout(() => {
         resetForm();
       }, 1500);
     }
-  }
+  }, [question, feedback, userInput, score, generateQuestion, setScore, setFeedback, setSuccessEmoji, setShowCelebration, setQuestion, setUserInput, setRecognizedText]);
 
   // Reconnaissance vocale
   function startListening() {
@@ -295,10 +299,10 @@ function App() {
         // On réduit le timeout pour éviter les race conditions
         setTimeout(() => {
           // Vérifier qu'il n'y a pas de feedback en cours (évite les soumissions pendant l'affichage du feedback)
-          if (feedbackRef.current === null) {
+          if (feedback === null) {
             handleSubmit(undefined, number);
           } else {
-            addDebugLog(`⏸ Soumission ignorée (feedback en cours: ${feedbackRef.current})`);
+            addDebugLog(`⏸ Soumission ignorée (feedback en cours: ${feedback})`);
           }
         }, 100);
       } else {
@@ -405,33 +409,6 @@ function App() {
   useEffect(() => {
     setQuestion(generateQuestion());
   }, [generateQuestion]);
-
-  // Synchroniser la ref avec le state question
-  useEffect(() => {
-    questionRef.current = question;
-  }, [question]);
-
-  // Synchroniser la ref avec le state feedback
-  useEffect(() => {
-    feedbackRef.current = feedback;
-  }, [feedback]);
-
-  // Sauvegarder les paramètres et le score dans localStorage quand ils changent
-  useEffect(() => {
-    saveToLocalStorage('leftNumbers', leftNumbers);
-  }, [leftNumbers]);
-
-  useEffect(() => {
-    saveToLocalStorage('rightNumbers', rightNumbers);
-  }, [rightNumbers]);
-
-  useEffect(() => {
-    saveToLocalStorage('score', score);
-  }, [score]);
-
-  useEffect(() => {
-    saveToLocalStorage('showDebug', showDebug);
-  }, [showDebug]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 flex items-center justify-center p-4">
