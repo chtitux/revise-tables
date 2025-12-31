@@ -54,6 +54,7 @@ function App() {
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false); // Ref pour savoir si on doit continuer d'écouter
   const questionRef = useRef<Question>(question); // Ref pour toujours avoir la question actuelle
+  const feedbackRef = useRef<'correct' | 'incorrect' | 'invalid' | 'unicode' | null>(null); // Ref pour le feedback actuel
   const wakeLockRef = useRef<any>(null); // Ref pour le Wake Lock (empêcher mise en veille)
 
   // Fonction pour ajouter un log de debug
@@ -270,7 +271,12 @@ function App() {
         // Validation automatique quand un nombre est détecté - passer le nombre directement
         // On réduit le timeout pour éviter les race conditions
         setTimeout(() => {
-          handleSubmit(undefined, number);
+          // Vérifier qu'il n'y a pas de feedback en cours (évite les soumissions pendant l'affichage du feedback)
+          if (feedbackRef.current === null) {
+            handleSubmit(undefined, number);
+          } else {
+            addDebugLog(`⏸ Soumission ignorée (feedback en cours: ${feedbackRef.current})`);
+          }
         }, 100);
       } else {
         setUserInput(transcript);
@@ -371,6 +377,11 @@ function App() {
   useEffect(() => {
     questionRef.current = question;
   }, [question]);
+
+  // Synchroniser la ref avec le state feedback
+  useEffect(() => {
+    feedbackRef.current = feedback;
+  }, [feedback]);
 
   // Sauvegarder les paramètres et le score dans localStorage quand ils changent
   useEffect(() => {
