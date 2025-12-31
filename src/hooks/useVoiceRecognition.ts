@@ -11,6 +11,7 @@ interface UseVoiceRecognitionReturn {
   recognizedText: string;
   startListening: () => void;
   stopListening: () => void;
+  clearRecognizedText: () => void;
 }
 
 export function useVoiceRecognition({
@@ -22,6 +23,12 @@ export function useVoiceRecognition({
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false);
   const wakeLockRef = useRef<any>(null);
+  const onResultRef = useRef(onResult);
+
+  // Toujours garder la dernière version du callback
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
 
   // Demander un Wake Lock pour empêcher la mise en veille pendant l'écoute
   const requestWakeLock = useCallback(async () => {
@@ -88,8 +95,8 @@ export function useVoiceRecognition({
         addDebugLog(`→ Pas de nombre détecté`);
       }
 
-      // Appeler le callback avec le résultat
-      onResult(transcript, number);
+      // Appeler le callback avec le résultat (utilise la ref pour avoir la dernière version)
+      onResultRef.current(transcript, number);
     };
 
     recognition.onerror = (event: any) => {
@@ -176,10 +183,15 @@ export function useVoiceRecognition({
     };
   }, [isListening, requestWakeLock]);
 
+  const clearRecognizedText = useCallback(() => {
+    setRecognizedText('');
+  }, []);
+
   return {
     isListening,
     recognizedText,
     startListening,
     stopListening,
+    clearRecognizedText,
   };
 }

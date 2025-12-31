@@ -125,12 +125,28 @@ function App() {
     return { num1, num2, answer: num1 * num2 };
   }, [leftNumbers, rightNumbers]);
 
+  // Hook de reconnaissance vocale
+  const { isListening, recognizedText, startListening, stopListening, clearRecognizedText } = useVoiceRecognition({
+    onResult: (text: string, number: number | null) => {
+      if (number !== null) {
+        setUserInput(number.toString());
+        // Validation automatique quand un nombre est détecté
+        setTimeout(() => {
+          handleSubmit(undefined, number);
+        }, 100);
+      } else {
+        setUserInput(text);
+      }
+    },
+    addDebugLog,
+  });
+
   // Réinitialiser le formulaire
-  function resetForm() {
+  const resetForm = useCallback(() => {
     setUserInput('');
     setFeedback(null);
-  }
-
+    clearRecognizedText();
+  }, [setUserInput, setFeedback, clearRecognizedText]);
 
   // Gérer la soumission
   const handleSubmit = useCallback((e?: React.FormEvent, valueOverride?: number) => {
@@ -210,23 +226,7 @@ function App() {
         resetForm();
       }, 1500);
     }
-  }, [question, feedback, userInput, score, generateQuestion, setScore, setFeedback, setSuccessEmoji, setShowCelebration, setQuestion, setUserInput]);
-
-  // Hook de reconnaissance vocale
-  const { isListening, recognizedText, startListening, stopListening } = useVoiceRecognition({
-    onResult: (text: string, number: number | null) => {
-      if (number !== null) {
-        setUserInput(number.toString());
-        // Validation automatique quand un nombre est détecté
-        setTimeout(() => {
-          handleSubmit(undefined, number);
-        }, 100);
-      } else {
-        setUserInput(text);
-      }
-    },
-    addDebugLog,
-  });
+  }, [question, feedback, userInput, score, generateQuestion, setScore, setFeedback, setSuccessEmoji, setShowCelebration, setQuestion, setUserInput, resetForm]);
 
   // Générer une première question au chargement et quand les nombres changent
   useEffect(() => {
