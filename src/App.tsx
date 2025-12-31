@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { extractNumberFromText } from './utils/frenchNumberParser';
+import { InstallButton } from './components/InstallButton';
 import './App.css';
 
 interface Question {
@@ -700,6 +701,7 @@ function App() {
           )}
         </div>
       </div>
+      <InstallButton />
     </div>
   );
 }
